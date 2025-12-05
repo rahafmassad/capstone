@@ -1,8 +1,11 @@
+import { ApiError, login, signup } from '@/services/api';
+import { storage } from '@/utils/storage';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -32,7 +35,23 @@ export default function WelcomeScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [plateNumber, setPlateNumber] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = await storage.getToken();
+      if (token) {
+        // User is already logged in, redirect to home
+        router.replace('/(tabs)');
+      }
+    };
+
+    checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Background animation values
   const orb1Opacity = useSharedValue(0.3);
@@ -136,24 +155,88 @@ export default function WelcomeScreen() {
 
   const handleSignUp = () => {
     setFormType('signup');
+    setError(null);
   };
 
   const handleLogIn = () => {
     setFormType('login');
+    setError(null);
   };
 
   const handleBack = () => {
     setFormType('none');
+    setError(null);
   };
 
-  const handleSignUpSubmit = () => {
-    console.log('Sign Up pressed', { email, password, fullName, plateNumber });
-    router.push('/terms');
+  const handleSignUpSubmit = async () => {
+    // Validation
+    if (!email.trim() || !password.trim() || !fullName.trim()) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError('You must accept the terms and conditions to sign up');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await signup({
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+        acceptedTerms: acceptedTerms,
+      });
+
+      // Save token and user data
+      await storage.saveToken(response.token);
+      await storage.saveUser(response.user);
+
+      // Navigate to main app (you can change this to your desired route)
+      router.replace('/(tabs)');
+    } catch (err) {
+      const apiError = err as ApiError;
+      const errorMessage = apiError.message || 'An error occurred during signup. Please try again.';
+      setError(errorMessage);
+      Alert.alert('Signup Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLoginSubmit = () => {
-    console.log('Login pressed', { email, password });
-    router.push('/terms');
+  const handleLoginSubmit = async () => {
+    // Validation
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await login({
+        email: email.trim().toLowerCase(),
+        password: password,
+      });
+
+      // Save token and user data
+      await storage.saveToken(response.token);
+      await storage.saveUser(response.user);
+
+      // Navigate to main app (you can change this to your desired route)
+      router.replace('/(tabs)');
+    } catch (err) {
+      const apiError = err as ApiError;
+      const errorMessage = apiError.message || 'Invalid email or password. Please try again.';
+      setError(errorMessage);
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleForgotPassword = () => {
@@ -279,6 +362,12 @@ export default function WelcomeScreen() {
                 </TouchableOpacity>
                 <Text style={styles.title}>Sign Up</Text>
 
+                {error && formType === 'signup' && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>Email</Text>
                   <TextInput
@@ -320,25 +409,33 @@ export default function WelcomeScreen() {
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Plate Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter plate number"
-                    placeholderTextColor="#CCCCCC"
-                    value={plateNumber}
-                    onChangeText={setPlateNumber}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
+                <View style={styles.checkboxContainer}>
+                  <TouchableOpacity
+                    style={styles.checkbox}
+                    onPress={() => setAcceptedTerms(!acceptedTerms)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.checkboxBox, acceptedTerms && styles.checkboxBoxChecked]}>
+                      {acceptedTerms && <Text style={styles.checkboxCheck}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>
+                      I accept the{' '}
+                      <Text style={styles.checkboxLink} onPress={handleTermsOfService}>
+                        Terms and Conditions
+                      </Text>
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
-                  style={styles.submitButton}
+                  style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                   onPress={handleSignUpSubmit}
                   activeOpacity={0.8}
+                  disabled={loading}
                 >
-                  <Text style={styles.submitButtonText}>SIGN UP</Text>
+                  <Text style={styles.submitButtonText}>
+                    {loading ? 'SIGNING UP...' : 'SIGN UP'}
+                  </Text>
                 </TouchableOpacity>
 
                 <View style={styles.switchContainer}>
@@ -364,6 +461,12 @@ export default function WelcomeScreen() {
                   <Text style={styles.backButtonText}>← Back</Text>
                 </TouchableOpacity>
                 <Text style={styles.loginTitle}>Log In</Text>
+
+                {error && formType === 'login' && (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
 
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>Email</Text>
@@ -398,11 +501,14 @@ export default function WelcomeScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.loginSubmitButton}
+                  style={[styles.loginSubmitButton, loading && styles.loginSubmitButtonDisabled]}
                   onPress={handleLoginSubmit}
                   activeOpacity={0.8}
+                  disabled={loading}
                 >
-                  <Text style={styles.loginSubmitButtonText}>LOG IN</Text>
+                  <Text style={styles.loginSubmitButtonText}>
+                    {loading ? 'LOGGING IN...' : 'LOG IN'}
+                  </Text>
                 </TouchableOpacity>
 
                 <View style={styles.switchContainer}>
@@ -590,6 +696,19 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     fontFamily: 'sans-serif',
   },
+  errorContainer: {
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#F44336',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   loginTitle: {
     fontSize: 32,
     fontWeight: '800',
@@ -641,6 +760,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  submitButtonDisabled: {
+    backgroundColor: '#9E9E9E',
+    opacity: 0.6,
+  },
   submitButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -663,11 +786,52 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  loginSubmitButtonDisabled: {
+    backgroundColor: '#9E9E9E',
+    opacity: 0.6,
+  },
   loginSubmitButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1E3264',
     textTransform: 'uppercase',
+  },
+  checkboxContainer: {
+    marginBottom: 20,
+  },
+  checkbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkboxBox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#1E3264',
+    borderRadius: 4,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxBoxChecked: {
+    backgroundColor: '#1E3264',
+    borderColor: '#1E3264',
+  },
+  checkboxCheck: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: '#333333',
+    flex: 1,
+  },
+  checkboxLink: {
+    color: '#1E3264',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   switchContainer: {
     alignItems: 'center',

@@ -1,7 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -10,9 +11,48 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { getLocations, Location, ApiError } from '@/services/api';
+import { storage } from '@/utils/storage';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = await storage.getToken();
+      if (!token) {
+        // No token, redirect to welcome
+        router.replace('/welcome');
+        return;
+      }
+      // If authenticated, fetch locations
+      fetchLocations();
+    };
+
+    checkAuth();
+  }, []);
+
+  const fetchLocations = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getLocations();
+      setLocations(response.locations || []);
+    } catch (err) {
+      const apiError = err as ApiError;
+      const errorMessage = apiError.message || 'Failed to load locations. Please try again.';
+      setError(errorMessage);
+      console.error('Error fetching locations:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSearchPress = () => {
     // Handle search press (to be implemented)
@@ -27,17 +67,10 @@ export default function HomeScreen() {
     setIsQRModalVisible(false);
   };
 
-  const handlePlacePress = (placeName: string) => {
+  const handlePlacePress = (location: Location) => {
     // Handle place card press (to be implemented)
-    console.log('Place pressed:', placeName);
+    console.log('Location pressed:', location.name);
   };
-
-  // Sample places data
-  const places = [
-    { id: 1, name: 'Place name', workingTime: 'Place working time' },
-    { id: 2, name: 'Place name', workingTime: 'Place working time' },
-    { id: 3, name: 'Place name', workingTime: 'Place working time' },
-  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -89,22 +122,55 @@ export default function HomeScreen() {
         {/* Places Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Suggestions</Text>
-          <View style={styles.placesGrid}>
-            {places.map((place) => (
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#1E3264" />
+              <Text style={styles.loadingText}>Loading locations...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
-                key={place.id}
-                style={styles.placeCard}
-                onPress={() => handlePlacePress(place.name)}
+                style={styles.retryButton}
+                onPress={fetchLocations}
                 activeOpacity={0.8}
               >
-                <View style={styles.placeImage}>
-                  <MaterialIcons name="landscape" size={40} color="#999999" />
-                </View>
-                <Text style={styles.placeName}>{place.name}</Text>
-                <Text style={styles.placeTime}>{place.workingTime}</Text>
+                <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          ) : locations.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No locations available</Text>
+            </View>
+          ) : (
+            <View style={styles.placesGrid}>
+              {locations.map((location) => (
+                <TouchableOpacity
+                  key={location.id}
+                  style={styles.placeCard}
+                  onPress={() => handlePlacePress(location)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.placeImage}>
+                    <MaterialIcons name="location-on" size={40} color="#1E3264" />
+                  </View>
+                  <Text style={styles.placeName} numberOfLines={2}>
+                    {location.name}
+                  </Text>
+                  {location.city && (
+                    <Text style={styles.placeTime} numberOfLines={1}>
+                      {location.city}
+                    </Text>
+                  )}
+                  {location.description && (
+                    <Text style={styles.placeDescription} numberOfLines={2}>
+                      {location.description}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -238,6 +304,56 @@ const styles = StyleSheet.create({
   placeTime: {
     fontSize: 12,
     color: '#666666',
+    marginTop: 4,
+  },
+  placeDescription: {
+    fontSize: 11,
+    color: '#999999',
+    marginTop: 4,
+    lineHeight: 14,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#D32F2F',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#1E3264',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
