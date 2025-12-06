@@ -4,7 +4,7 @@
 // Example: 'http://192.168.1.100:4000/api'
 // For Android emulator, use 'http://10.0.2.2:4000/api'
 // For iOS simulator, 'localhost' should work
-const API_BASE_URL = 'https://phonal-shelli-friskily.ngrok-free.dev/api'; // Update with your production URL
+const API_BASE_URL = 'https://defeasible-doreen-crustless.ngrok-free.dev/api'; // Update with your production URL
 
 export interface AuthSignupRequest {
   fullName: string;
@@ -47,6 +47,19 @@ export interface Location {
 
 export interface LocationsResponse {
   locations: Location[];
+}
+
+export interface Gate {
+  id: string;
+  name: string;
+  locationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LocationGatesResponse {
+  location: Location;
+  gates: Gate[];
 }
 
 export interface Activity {
@@ -283,6 +296,15 @@ export async function getLocations(): Promise<LocationsResponse> {
  */
 export async function getLocation(locationId: string): Promise<{ location: Location }> {
   return apiRequest<{ location: Location }>(`/locations/${locationId}`, {
+    method: 'GET',
+  });
+}
+
+/**
+ * Get gates for a location
+ */
+export async function getLocationGates(locationId: string): Promise<LocationGatesResponse> {
+  return apiRequest<LocationGatesResponse>(`/locations/${locationId}/gates`, {
     method: 'GET',
   });
 }

@@ -1,4 +1,4 @@
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -7,20 +7,16 @@ import { storage } from '@/utils/storage';
 
 export default function TabLayout() {
   const router = useRouter();
-  const segments = useSegments();
 
-  // Check authentication on mount and when segments change
   useEffect(() => {
     const checkAuth = async () => {
       const token = await storage.getToken();
       if (!token) {
-        // No token, redirect to welcome
         router.replace('/welcome');
       }
     };
-
     checkAuth();
-  }, [segments]);
+  }, []);
 
   return (
     <Tabs

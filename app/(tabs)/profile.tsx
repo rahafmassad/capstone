@@ -137,7 +137,7 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     // Clear stored auth data
     await storage.clearAuth();
-    // Navigate to welcome page
+    // Navigate to welcome page and reset navigation stack
     router.replace('/welcome');
   };
 

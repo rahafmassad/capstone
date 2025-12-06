@@ -21,25 +21,14 @@ export default function ActivitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Check authentication and fetch activities on component mount and when sort changes
+  // Fetch activities on component mount and when sort changes
   useEffect(() => {
-    const checkAuthAndFetch = async () => {
-      const token = await storage.getToken();
-      if (!token) {
-        router.replace('/welcome');
-        return;
-      }
-
-      if (selectedSort !== 'all') {
-        fetchActivities(selectedSort);
-      } else {
-        // For 'all', fetch with 'newest' as default
-        fetchActivities('newest');
-      }
-    };
-
-    checkAuthAndFetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (selectedSort !== 'all') {
+      fetchActivities(selectedSort);
+    } else {
+      // For 'all', fetch with 'newest' as default
+      fetchActivities('newest');
+    }
   }, [selectedSort]);
 
   const fetchActivities = async (sort: 'newest' | 'oldest') => {

@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import React, { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -8,10 +9,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { getLocations, Location, ApiError } from '@/services/api';
 import { storage } from '@/utils/storage';
 
@@ -19,6 +20,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [allLocations, setAllLocations] = useState<Location[]>([]); // Store all locations
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,14 +30,11 @@ export default function HomeScreen() {
     const checkAuth = async () => {
       const token = await storage.getToken();
       if (!token) {
-        // No token, redirect to welcome
         router.replace('/welcome');
         return;
       }
-      // If authenticated, fetch locations
       fetchLocations();
     };
-
     checkAuth();
   }, []);
 
@@ -43,7 +43,9 @@ export default function HomeScreen() {
     setError(null);
     try {
       const response = await getLocations();
-      setLocations(response.locations || []);
+      const fetchedLocations = response.locations || [];
+      setAllLocations(fetchedLocations);
+      setLocations(fetchedLocations);
     } catch (err) {
       const apiError = err as ApiError;
       const errorMessage = apiError.message || 'Failed to load locations. Please try again.';
@@ -54,10 +56,25 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSearchPress = () => {
-    // Handle search press (to be implemented)
-    console.log('Search pressed');
-  };
+  // Filter locations based on search query
+  const filteredLocations = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return allLocations;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    return allLocations.filter((location) => {
+      const nameMatch = location.name?.toLowerCase().includes(query);
+      const cityMatch = location.city?.toLowerCase().includes(query);
+      const descriptionMatch = location.description?.toLowerCase().includes(query);
+      return nameMatch || cityMatch || descriptionMatch;
+    });
+  }, [searchQuery, allLocations]);
+
+  // Update displayed locations when filtered results change
+  useEffect(() => {
+    setLocations(filteredLocations);
+  }, [filteredLocations]);
 
   const handleQRCodePress = () => {
     setIsQRModalVisible(true);
@@ -68,8 +85,11 @@ export default function HomeScreen() {
   };
 
   const handlePlacePress = (location: Location) => {
-    // Handle place card press (to be implemented)
-    console.log('Location pressed:', location.name);
+    // Navigate to reservation page with location ID
+    router.push({
+      pathname: '/reservation',
+      params: { locationId: location.id },
+    });
   };
 
   return (
@@ -91,14 +111,27 @@ export default function HomeScreen() {
         </View>
 
         {/* Search Bar */}
-        <TouchableOpacity
-          style={styles.searchBar}
-          onPress={handleSearchPress}
-          activeOpacity={0.8}
-        >
+        <View style={styles.searchBar}>
           <MaterialIcons name="search" size={24} color="#666666" />
-          <Text style={styles.searchText}>Search for locations</Text>
-        </TouchableOpacity>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search for locations..."
+            placeholderTextColor="#999999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="close" size={20} color="#666666" />
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* QR Code Section */}
         <View style={styles.section}>
@@ -243,10 +276,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 12,
   },
-  searchText: {
-    fontSize: 16,
-    color: '#999999',
+  searchInput: {
     flex: 1,
+    fontSize: 16,
+    color: '#333333',
+    padding: 0,
+  },
+  clearButton: {
+    padding: 4,
   },
   section: {
     paddingHorizontal: 20,

@@ -1,4 +1,5 @@
-import React from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -7,7 +8,20 @@ import {
   View,
   ScrollView,
 } from 'react-native';
+import { storage } from '@/utils/storage';
+
 export default function GuideScreen() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = await storage.getToken();
+      if (!token) {
+        router.replace('/welcome');
+      }
+    };
+    checkAuth();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>

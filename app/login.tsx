@@ -1,17 +1,17 @@
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -106,7 +106,7 @@ export default function LoginScreen() {
             {/* Sign Up Prompt */}
             <View style={styles.signUpContainer}>
               <Text style={styles.signUpText}>
-                DON'T HAVE AN ACCOUNT?{' '}
+                DON&apos;T HAVE AN ACCOUNT?{' '}
                 <Text style={styles.signUpLink} onPress={handleSignUp}>
                   SIGNUP
                 </Text>

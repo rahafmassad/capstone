@@ -39,20 +39,6 @@ export default function WelcomeScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if user is already logged in
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = await storage.getToken();
-      if (token) {
-        // User is already logged in, redirect to home
-        router.replace('/(tabs)');
-      }
-    };
-
-    checkAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Background animation values
   const orb1Opacity = useSharedValue(0.3);
   const orb2Opacity = useSharedValue(0.2);
@@ -195,7 +181,7 @@ export default function WelcomeScreen() {
       await storage.saveToken(response.token);
       await storage.saveUser(response.user);
 
-      // Navigate to main app (you can change this to your desired route)
+      // Navigate to main app and reset navigation stack
       router.replace('/(tabs)');
     } catch (err) {
       const apiError = err as ApiError;
@@ -227,7 +213,7 @@ export default function WelcomeScreen() {
       await storage.saveToken(response.token);
       await storage.saveUser(response.user);
 
-      // Navigate to main app (you can change this to your desired route)
+      // Navigate to main app and reset navigation stack
       router.replace('/(tabs)');
     } catch (err) {
       const apiError = err as ApiError;
