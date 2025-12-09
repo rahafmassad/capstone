@@ -62,6 +62,92 @@ export interface LocationGatesResponse {
   gates: Gate[];
 }
 
+export interface SpotWithStatus {
+  id: string;
+  number?: number | null;
+  gateId: string;
+  locationId?: string | null;
+  cvStatus?: string | null; // "FREE" or "OCCUPIED"
+  isReservedByTicket: boolean;
+  status: 'FREE' | 'RESERVED' | 'OCCUPIED';
+}
+
+export interface GateSpotsResponse {
+  gate: Gate;
+  spots: SpotWithStatus[];
+}
+
+export interface CreateReservationRequest {
+  locationId: string;
+  gateId: string;
+}
+
+export interface ReservationLocationRef {
+  id: string;
+  name: string;
+}
+
+export interface ReservationGateRef {
+  id: string;
+  name: string;
+}
+
+export interface Reservation {
+  id: string;
+  status: string;
+  validFrom: string;
+  validUntil: string;
+  qrToken: string;
+  cancelledAt?: string | null;
+  consumedAt?: string | null;
+  location: ReservationLocationRef | null;
+  gate: ReservationGateRef | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StripeInfo {
+  checkoutSessionId: string;
+  checkoutUrl: string;
+}
+
+export interface Pricing {
+  baseAmountJOD: number;
+  finalAmountJOD: number;
+  businessCurrency: string;
+  chargedAmount: number;
+  chargedCurrency: string;
+  discountAmountJOD?: number;
+}
+
+export interface CreateReservationResponse {
+  reservation: Reservation;
+  pricing: Pricing;
+  stripe: StripeInfo;
+  appliedVoucher?: any | null;
+}
+
+export interface ConfirmPaymentRequest {
+  reservationId: string;
+  sessionId: string;
+}
+
+export interface Payment {
+  id: string;
+  reservationId: string;
+  stripeSessionId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface ConfirmPaymentResponse {
+  alreadyConfirmed?: boolean | null;
+  reservation: Reservation;
+  payment?: Payment | null;
+}
+
 export interface Activity {
   id: string;
   action: string;
@@ -307,6 +393,109 @@ export async function getLocationGates(locationId: string): Promise<LocationGate
   return apiRequest<LocationGatesResponse>(`/locations/${locationId}/gates`, {
     method: 'GET',
   });
+}
+
+/**
+ * Get spots for a gate with status
+ * Requires authentication token
+ */
+export async function getGateSpots(
+  gateId: string,
+  token: string
+): Promise<GateSpotsResponse> {
+  return apiRequest<GateSpotsResponse>(`/gates/${gateId}/spots`, {
+    method: 'GET',
+  }, token);
+}
+
+/**
+ * Create a reservation
+ * Requires authentication token
+ */
+export async function createReservation(
+  data: CreateReservationRequest,
+  token: string
+): Promise<CreateReservationResponse> {
+  return apiRequest<CreateReservationResponse>('/reservations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, token);
+}
+
+/**
+ * Confirm Stripe payment for a reservation
+ * Requires authentication token
+ */
+export async function confirmPayment(
+  data: ConfirmPaymentRequest,
+  token: string
+): Promise<ConfirmPaymentResponse> {
+  return apiRequest<ConfirmPaymentResponse>('/reservations/confirm-payment', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, token);
+}
+
+/**
+ * Get a single reservation by ID
+ * Requires authentication token
+ */
+export async function getReservation(
+  reservationId: string,
+  token: string
+): Promise<{ reservation: Reservation }> {
+  return apiRequest<{ reservation: Reservation }>(`/reservations/${reservationId}`, {
+    method: 'GET',
+  }, token);
+}
+
+/**
+ * Get all reservations for the current user
+ * Requires authentication token
+ */
+export async function getMyReservations(token: string): Promise<{ reservations: Reservation[] }> {
+  return apiRequest<{ reservations: Reservation[] }>('/reservations/me', {
+    method: 'GET',
+  }, token);
+}
+
+/**
+ * Get all vouchers for the current user
+ * Requires authentication token
+ */
+export async function getVouchers(token: string): Promise<{ vouchers: Voucher[] }> {
+  return apiRequest<{ vouchers: Voucher[] }>('/vouchers', {
+    method: 'GET',
+  }, token);
+}
+
+export interface Voucher {
+  id: string;
+  percentage: number;
+  used: boolean;
+  usedAt?: string | null;
+  expiresAt?: string | null;
+  reservationId?: string | null;
+  code?: string | null;
+}
+
+export interface CancelReservationResponse {
+  message: string;
+  reservation: Reservation;
+  voucher: Voucher;
+}
+
+/**
+ * Cancel a reservation
+ * Requires authentication token
+ */
+export async function cancelReservation(
+  reservationId: string,
+  token: string
+): Promise<CancelReservationResponse> {
+  return apiRequest<CancelReservationResponse>(`/reservations/${reservationId}/cancel`, {
+    method: 'POST',
+  }, token);
 }
 
 /**

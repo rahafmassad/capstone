@@ -1,10 +1,11 @@
+import { ApiError, getLocations, getMyReservations, getVouchers, Location, Reservation } from '@/services/api';
+import { storage } from '@/utils/storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import React, { useState, useEffect, useMemo } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -13,17 +14,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getLocations, Location, ApiError } from '@/services/api';
-import { storage } from '@/utils/storage';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [allLocations, setAllLocations] = useState<Location[]>([]); // Store all locations
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [latestReservation, setLatestReservation] = useState<Reservation | null>(null);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [hasVouchers, setHasVouchers] = useState(false);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -34,9 +36,24 @@ export default function HomeScreen() {
         return;
       }
       fetchLocations();
+      fetchLatestReservation();
+      checkVouchers();
     };
     checkAuth();
   }, []);
+
+  // Refresh vouchers when screen comes into focus (e.g., after cancelling reservation)
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshVouchers = async () => {
+        const token = await storage.getToken();
+        if (token) {
+          checkVouchers();
+        }
+      };
+      refreshVouchers();
+    }, [])
+  );
 
   const fetchLocations = async () => {
     setLoading(true);
@@ -76,12 +93,64 @@ export default function HomeScreen() {
     setLocations(filteredLocations);
   }, [filteredLocations]);
 
-  const handleQRCodePress = () => {
-    setIsQRModalVisible(true);
+  const fetchLatestReservation = async () => {
+    setReservationsLoading(true);
+    try {
+      const token = await storage.getToken();
+      if (!token) {
+        return;
+      }
+
+      const response = await getMyReservations(token);
+      const reservations = response.reservations || [];
+      
+      // Get the most recent reservation (they're already sorted by createdAt DESC)
+      if (reservations.length > 0) {
+        setLatestReservation(reservations[0]);
+      }
+    } catch (err) {
+      const apiError = err as ApiError;
+      // Don't show error for reservations, just log it
+      console.error('Error fetching reservations:', err);
+    } finally {
+      setReservationsLoading(false);
+    }
   };
 
-  const handleCloseModal = () => {
-    setIsQRModalVisible(false);
+  const checkVouchers = async () => {
+    setVouchersLoading(true);
+    try {
+      const token = await storage.getToken();
+      if (!token) {
+        return;
+      }
+
+      const response = await getVouchers(token);
+      const vouchers = response.vouchers || [];
+      
+      // Show voucher button if user has any vouchers
+      setHasVouchers(vouchers.length > 0);
+    } catch (err) {
+      const apiError = err as ApiError;
+      // Don't show error for vouchers, just log it
+      console.error('Error fetching vouchers:', err);
+      setHasVouchers(false);
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  const handleReservationDetailsPress = () => {
+    if (latestReservation) {
+      router.push({
+        pathname: '/reservation-details',
+        params: { reservationId: latestReservation.id },
+      });
+    }
+  };
+
+  const handleVoucherPress = () => {
+    router.push('/voucher');
   };
 
   const handlePlacePress = (location: Location) => {
@@ -133,21 +202,49 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* QR Code Section */}
+        {/* Reservation Details Button Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>The QR code</Text>
+          <Text style={styles.sectionTitle}>Reservation Details</Text>
           <TouchableOpacity
-            style={styles.qrCodeContainer}
-            onPress={handleQRCodePress}
+            style={styles.reservationButton}
+            onPress={handleReservationDetailsPress}
+            disabled={!latestReservation || reservationsLoading}
             activeOpacity={0.8}
           >
-            <Image
-              source={require('@/assets/images/qr-code.png')}
-              style={styles.qrCodeImage}
-              contentFit="contain"
-            />
+            {reservationsLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <MaterialIcons name="receipt-long" size={24} color="#FFFFFF" />
+                <Text style={styles.reservationButtonText}>
+                  {latestReservation ? 'View Reservation Details' : 'No Reservations'}
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
+
+        {/* Voucher Button Section - Only show if user has vouchers */}
+        {hasVouchers && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Vouchers</Text>
+            <TouchableOpacity
+              style={styles.voucherButton}
+              onPress={handleVoucherPress}
+              disabled={vouchersLoading}
+              activeOpacity={0.8}
+            >
+              {vouchersLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <MaterialIcons name="card-giftcard" size={24} color="#FFFFFF" />
+                  <Text style={styles.voucherButtonText}>View Vouchers</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Divider */}
         <View style={styles.divider} />
@@ -206,37 +303,6 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* QR Code Modal */}
-      <Modal
-        visible={isQRModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleCloseModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>The QR code</Text>
-            <Text style={styles.modalDescription}>
-              Scan your QR code and this QR code will become unusable again after scanning
-            </Text>
-            <View style={styles.modalQRContainer}>
-              <Image
-                source={require('@/assets/images/qr-code.png')}
-                style={styles.modalQRImage}
-                contentFit="contain"
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={handleCloseModal}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelButtonText}>CANCEL</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -295,15 +361,21 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginBottom: 15,
   },
-  qrCodeContainer: {
-    alignSelf: 'center',
+  reservationButton: {
+    backgroundColor: '#1E3264',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
+    gap: 12,
+    minHeight: 56,
   },
-  qrCodeImage: {
-    width: 250,
-    height: 250,
+  reservationButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   divider: {
     height: 1,
@@ -392,55 +464,20 @@ const styles = StyleSheet.create({
     color: '#999999',
     textAlign: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  modalQRContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalQRImage: {
-    width: 250,
-    height: 250,
-  },
-  cancelButton: {
-    width: '100%',
-    paddingVertical: 14,
+  voucherButton: {
+    backgroundColor: '#FF6B35',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FF6B35',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
+    minHeight: 56,
   },
-  cancelButtonText: {
+  voucherButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#FF6B35',
   },
 });

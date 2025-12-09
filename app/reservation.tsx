@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getLocation, getLocationGates, Location, Gate, ApiError } from '@/services/api';
+import { getLocation, getLocationGates, getGateSpots, createReservation, confirmPayment, Location, Gate, SpotWithStatus, ApiError } from '@/services/api';
 import { storage } from '@/utils/storage';
 
 export default function ReservationScreen() {
@@ -18,9 +18,17 @@ export default function ReservationScreen() {
   const { locationId } = useLocalSearchParams<{ locationId: string }>();
   const [location, setLocation] = useState<Location | null>(null);
   const [gates, setGates] = useState<Gate[]>([]);
+  const [selectedGate, setSelectedGate] = useState<Gate | null>(null);
+  const [spots, setSpots] = useState<SpotWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [gatesLoading, setGatesLoading] = useState(false);
+  const [spotsLoading, setSpotsLoading] = useState(false);
+  const [reserving, setReserving] = useState(false);
+  const [waitingForPayment, setWaitingForPayment] = useState(false);
+  const [reservationId, setReservationId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (locationId) {
@@ -28,6 +36,84 @@ export default function ReservationScreen() {
       fetchGates();
     }
   }, [locationId]);
+
+  // Real-time updates for spots when a gate is selected
+  useEffect(() => {
+    if (!selectedGate) {
+      return;
+    }
+
+    // Fetch spots immediately with loading indicator
+    fetchSpots(selectedGate.id, true);
+
+    // Set up interval to fetch spots every 5 seconds (silent background updates)
+    const interval = setInterval(() => {
+      fetchSpots(selectedGate.id, false);
+    }, 5000);
+
+    // Cleanup interval on unmount or when gate changes
+    return () => clearInterval(interval);
+  }, [selectedGate]);
+
+  // Poll for payment confirmation when waiting for payment
+  useEffect(() => {
+    if (!waitingForPayment || !reservationId || !sessionId) {
+      return;
+    }
+
+    const pollForPayment = async () => {
+      try {
+        const token = await storage.getToken();
+        if (!token) {
+          router.replace('/welcome');
+          return;
+        }
+
+        const response = await confirmPayment(
+          {
+            reservationId: reservationId,
+            sessionId: sessionId,
+          },
+          token
+        );
+
+        // Payment confirmed successfully
+        if (response.reservation.status === 'CONFIRMED' || response.alreadyConfirmed) {
+          setWaitingForPayment(false);
+          setSuccessMessage('Payment confirmed! Reservation is active.');
+          setTimeout(() => {
+            router.replace({
+              pathname: '/reservation-details',
+              params: { reservationId: reservationId },
+            });
+          }, 2000);
+        }
+      } catch (err) {
+        const apiError = err as ApiError;
+        // If payment is not yet confirmed (400 error), continue polling
+        // Only stop polling on authentication errors or other critical errors
+        if (apiError.status === 401) {
+          await storage.clearAuth();
+          router.replace('/welcome');
+          return;
+        }
+        // For 400 errors (payment not completed), continue polling silently
+        // For other errors, log but continue polling
+        if (apiError.status !== 400) {
+          console.error('Error confirming payment:', err);
+        }
+      }
+    };
+
+    // Poll every 3 seconds
+    const interval = setInterval(pollForPayment, 3000);
+
+    // Initial poll immediately
+    pollForPayment();
+
+    // Cleanup interval
+    return () => clearInterval(interval);
+  }, [waitingForPayment, reservationId, sessionId]);
 
   const fetchLocationDetails = async () => {
     if (!locationId) {
@@ -87,9 +173,97 @@ export default function ReservationScreen() {
     }
   };
 
-  const handleGatePress = (gate: Gate) => {
-    // Handle gate selection (to be implemented)
-    console.log('Gate pressed:', gate.name);
+  const handleGatePress = async (gate: Gate) => {
+    setSelectedGate(gate);
+    // Initial fetch with loading indicator
+    await fetchSpots(gate.id, true);
+  };
+
+  const handleSelectGate = async () => {
+    if (!selectedGate || !locationId) {
+      setError('Please select a gate first');
+      setSuccessMessage(null);
+      return;
+    }
+
+    setReserving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const token = await storage.getToken();
+      if (!token) {
+        router.replace('/welcome');
+        return;
+      }
+
+      const response = await createReservation(
+        {
+          locationId: locationId,
+          gateId: selectedGate.id,
+        },
+        token
+      );
+
+      // Extract session ID from response
+      const extractedSessionId = response.stripe.checkoutSessionId;
+
+      if (!extractedSessionId) {
+        throw new Error('Session ID not found in response');
+      }
+
+      // Store reservation and session IDs for polling
+      setReservationId(response.reservation.id);
+      setSessionId(extractedSessionId);
+
+      // Start waiting for payment confirmation
+      setWaitingForPayment(true);
+      setSuccessMessage('Reservation created! Waiting for payment confirmation...');
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.status === 401) {
+        await storage.clearAuth();
+        router.replace('/welcome');
+        return;
+      }
+      console.error('Error creating reservation:', err);
+      setError(apiError.message || 'Failed to create reservation. Please try again.');
+    } finally {
+      setReserving(false);
+    }
+  };
+
+  const fetchSpots = async (gateId: string, showLoading: boolean = true) => {
+    if (showLoading) {
+      setSpotsLoading(true);
+      setSpots([]);
+    }
+    try {
+      const token = await storage.getToken();
+      if (!token) {
+        router.replace('/welcome');
+        return;
+      }
+
+      const response = await getGateSpots(gateId, token);
+      setSpots(response.spots || []);
+    } catch (err) {
+      const apiError = err as ApiError;
+      if (apiError.status === 401) {
+        await storage.clearAuth();
+        router.replace('/welcome');
+        return;
+      }
+      console.error('Error fetching spots:', err);
+      // Don't show error on background updates, only on initial load
+      if (showLoading) {
+        setError('Failed to load spots. Please try again.');
+      }
+    } finally {
+      if (showLoading) {
+        setSpotsLoading(false);
+      }
+    }
   };
 
   const handleBack = () => {
@@ -163,20 +337,6 @@ export default function ReservationScreen() {
                   <Text style={styles.descriptionText}>{location.description}</Text>
                 </View>
               )}
-
-              <View style={styles.detailsContainer}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Created</Text>
-                  <Text style={styles.detailValue}>{formatDate(location.createdAt)}</Text>
-                </View>
-
-                {location.updatedAt && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Last Updated</Text>
-                    <Text style={styles.detailValue}>{formatDate(location.updatedAt)}</Text>
-                  </View>
-                )}
-              </View>
             </View>
 
             {/* Gates Section */}
@@ -192,14 +352,124 @@ export default function ReservationScreen() {
                     {gates.map((gate) => (
                       <TouchableOpacity
                         key={gate.id}
-                        style={styles.gateButton}
+                        style={[
+                          styles.gateButton,
+                          selectedGate?.id === gate.id && styles.gateButtonSelected,
+                        ]}
                         onPress={() => handleGatePress(gate)}
                         activeOpacity={0.8}
                       >
-                        <MaterialIcons name="door-sliding" size={24} color="#1E3264" />
-                        <Text style={styles.gateButtonText}>{gate.name}</Text>
+                        <MaterialIcons 
+                          name="door-sliding" 
+                          size={24} 
+                          color={selectedGate?.id === gate.id ? '#FFFFFF' : '#1E3264'} 
+                        />
+                        <Text style={[
+                          styles.gateButtonText,
+                          selectedGate?.id === gate.id && styles.gateButtonTextSelected,
+                        ]}>
+                          {gate.name}
+                        </Text>
                       </TouchableOpacity>
                     ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Select Button */}
+            {selectedGate && !waitingForPayment && (
+              <View style={styles.selectButtonContainer}>
+                {successMessage && (
+                  <View style={styles.successContainer}>
+                    <Text style={styles.successText}>{successMessage}</Text>
+                  </View>
+                )}
+                {error && !loading && (
+                  <View style={styles.errorMessageContainer}>
+                    <Text style={styles.errorMessageText}>{error}</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[styles.selectButton, reserving && styles.selectButtonDisabled]}
+                  onPress={handleSelectGate}
+                  disabled={reserving}
+                  activeOpacity={0.8}
+                >
+                  {reserving ? (
+                    <>
+                      <ActivityIndicator size="small" color="#FFFFFF" style={styles.selectButtonLoader} />
+                      <Text style={styles.selectButtonText}>Creating Reservation...</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.selectButtonText}>Select</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Payment Waiting Screen */}
+            {waitingForPayment && (
+              <View style={styles.paymentWaitingContainer}>
+                <ActivityIndicator size="large" color="#1E3264" />
+                <Text style={styles.paymentWaitingTitle}>Waiting for Payment</Text>
+                <Text style={styles.paymentWaitingText}>
+                  Please complete the payment.
+                </Text>
+                <Text style={styles.paymentWaitingSubtext}>
+                  We'll automatically confirm your reservation once payment is complete.
+                </Text>
+                {successMessage && (
+                  <View style={styles.successContainer}>
+                    <Text style={styles.successText}>{successMessage}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Spots Section */}
+            {selectedGate && (
+              <View style={styles.spotsSection}>
+                <Text style={styles.spotsTitle}>
+                  Spots for {selectedGate.name}
+                </Text>
+                {spotsLoading ? (
+                  <View style={styles.spotsLoadingContainer}>
+                    <ActivityIndicator size="small" color="#1E3264" />
+                    <Text style={styles.spotsLoadingText}>Loading spots...</Text>
+                  </View>
+                ) : spots.length === 0 ? (
+                  <View style={styles.emptySpotsContainer}>
+                    <Text style={styles.emptySpotsText}>No spots available</Text>
+                  </View>
+                ) : (
+                  <View style={styles.spotsGrid}>
+                    {spots.map((spot) => {
+                      const isFree = spot.cvStatus?.toUpperCase() === 'FREE';
+                      return (
+                        <TouchableOpacity
+                          key={spot.id}
+                          style={[
+                            styles.spotButton,
+                            isFree ? styles.spotButtonFree : styles.spotButtonOccupied,
+                          ]}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[
+                            styles.spotNumber,
+                            isFree ? styles.spotNumberFree : styles.spotNumberOccupied,
+                          ]}>
+                            {spot.number ?? 'N/A'}
+                          </Text>
+                          <Text style={[
+                            styles.spotStatus,
+                            isFree ? styles.spotStatusFree : styles.spotStatusOccupied,
+                          ]}>
+                            {isFree ? 'Free' : 'Occupied'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -393,6 +663,169 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1E3264',
+  },
+  gateButtonSelected: {
+    backgroundColor: '#1E3264',
+    borderColor: '#1E3264',
+  },
+  gateButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  spotsSection: {
+    marginTop: 30,
+    paddingTop: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  spotsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1E3264',
+    marginBottom: 16,
+  },
+  spotsLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  spotsLoadingText: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  emptySpotsContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptySpotsText: {
+    fontSize: 14,
+    color: '#999999',
+  },
+  spotsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  spotButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  spotButtonFree: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  spotButtonOccupied: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#9E9E9E',
+  },
+  spotNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  spotNumberFree: {
+    color: '#2E7D32',
+  },
+  spotNumberOccupied: {
+    color: '#616161',
+  },
+  spotStatus: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  spotStatusFree: {
+    color: '#4CAF50',
+  },
+  spotStatusOccupied: {
+    color: '#9E9E9E',
+  },
+  selectButtonContainer: {
+    marginTop: 30,
+    paddingTop: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  selectButton: {
+    backgroundColor: '#1E3264',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  selectButtonDisabled: {
+    opacity: 0.6,
+  },
+  selectButtonLoader: {
+    marginRight: 8,
+  },
+  selectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  successContainer: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  successText: {
+    color: '#2E7D32',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  errorMessageContainer: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#F44336',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  errorMessageText: {
+    color: '#C62828',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  paymentWaitingContainer: {
+    marginTop: 30,
+    paddingTop: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  paymentWaitingTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1E3264',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  paymentWaitingText: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  paymentWaitingSubtext: {
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
 
