@@ -4,7 +4,7 @@
 // Example: 'http://192.168.1.100:4000/api'
 // For Android emulator, use 'http://10.0.2.2:4000/api'
 // For iOS simulator, 'localhost' should work
-const API_BASE_URL = 'https://defeasible-doreen-crustless.ngrok-free.dev/api'; // Update with your production URL
+const API_BASE_URL = 'https://phonal-shelli-friskily.ngrok-free.dev/api'; // Update with your production URL
 
 export interface AuthSignupRequest {
   fullName: string;
