@@ -1,36 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import { ScreenBackground } from '@/components/screen-background';
+import { Skeleton } from '@/components/skeleton-loader';
+import { ApiError, getCurrentUser, updateCurrentUser } from '@/services/api';
+import { storage } from '@/utils/storage';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { getCurrentUser, updateCurrentUser, ApiError } from '@/services/api';
-import { storage } from '@/utils/storage';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch user data on component mount
-  useEffect(() => {
-    fetchUserData();
-  }, []);
-
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -63,7 +63,12 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  // Fetch user data on component mount
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
 
   const handleUpdate = async () => {
     // Validation
@@ -142,6 +147,7 @@ export default function ProfileScreen() {
   };
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -151,118 +157,183 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Page Title */}
-          <Text style={styles.pageTitle}>Profile</Text>
-          
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#1E3264" />
-              <Text style={styles.loadingText}>Loading profile...</Text>
+            <View style={styles.skeletonContainer}>
+              <Skeleton width={120} height={120} borderRadius={60} style={{ alignSelf: 'center', marginBottom: 24 }} />
+              <View style={styles.skeletonForm}>
+                <Skeleton width="100%" height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+                <Skeleton width="100%" height={50} borderRadius={8} style={{ marginBottom: 16 }} />
+                <Skeleton width="100%" height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+                <Skeleton width="100%" height={50} borderRadius={8} style={{ marginBottom: 16 }} />
+                <Skeleton width="100%" height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+                <Skeleton width="100%" height={50} borderRadius={8} style={{ marginBottom: 16 }} />
+                <Skeleton width="100%" height={50} borderRadius={12} style={{ marginTop: 8 }} />
+              </View>
             </View>
           ) : (
-            <View style={styles.formContainer}>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
+            <>
+              <View style={styles.topSection}>
+                {/* Page Title */}
+                <Text style={styles.pageTitle}>Profile</Text>
+                
+                {/* Profile Image */}
+                <View style={styles.profileImageContainer}>
+                  <Image
+                    source={require('@/assets/images/profile.jpg')}
+                    style={styles.profileImage}
+                    contentFit="cover"
+                  />
                 </View>
-              )}
-            {/* Name Input */}
-            <View style={styles.inputContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter Name"
-              placeholderTextColor="#CCCCCC"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
+                
+                <View style={styles.formContainer}>
+                  {error && (
+                    <View style={styles.errorContainer}>
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+                  {/* Name Input */}
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter Name"
+                      placeholderTextColor="#CCCCCC"
+                      value={name}
+                      onChangeText={setName}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                    />
+                  </View>
 
-          {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter Email"
-              placeholderTextColor="#CCCCCC"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
+                  {/* Email Input */}
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Email</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter Email"
+                      placeholderTextColor="#CCCCCC"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
 
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter Password"
-              placeholderTextColor="#CCCCCC"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
+                  {/* Password Input */}
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Password</Text>
+                    <View style={styles.passwordInputContainer}>
+                      <TextInput
+                        style={styles.passwordInput}
+                        placeholder="Enter Password"
+                        placeholderTextColor="#CCCCCC"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        selectionColor="#333333"
+                        underlineColorAndroid="transparent"
+                      />
+                      <TouchableOpacity
+                        onPress={() => setShowPassword(!showPassword)}
+                        style={styles.passwordToggle}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons
+                          name={showPassword ? "visibility" : "visibility-off"}
+                          size={24}
+                          color="#666666"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
-            {/* Update Button */}
-            <TouchableOpacity
-              style={[styles.updateButton, updating && styles.updateButtonDisabled]}
-              onPress={handleUpdate}
-              activeOpacity={0.8}
-              disabled={updating}
-            >
-              <Text style={styles.updateButtonText}>
-                {updating ? 'UPDATING...' : 'UPDATE'}
-              </Text>
-            </TouchableOpacity>
+                  {/* Update Button */}
+                  <TouchableOpacity
+                    style={[styles.updateButton, updating && styles.updateButtonDisabled]}
+                    onPress={handleUpdate}
+                    activeOpacity={0.8}
+                    disabled={updating}
+                  >
+                    <Text style={styles.updateButtonText}>
+                      {updating ? 'UPDATING...' : 'UPDATE'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-            {/* Sign Out Button */}
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={handleSignOut}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.signOutButtonText}>SIGN OUT</Text>
-            </TouchableOpacity>
-          </View>
+              {/* Sign Out Button - Outside white container */}
+              <View style={styles.signOutContainer}>
+                <TouchableOpacity
+                  style={styles.signOutButton}
+                  onPress={handleSignOut}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.signOutButtonText}>SIGN OUT</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
     paddingBottom: 100,
   },
   pageTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#333333',
-    textAlign: 'center',
+    textAlign: 'left',
+    marginBottom: 0,
+  },
+  profileImageContainer: {
+    alignItems: 'center',
     marginTop: 20,
+    marginBottom: 0,
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F5F5F5',
+  },
+  topSection: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingTop: 40,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
     marginBottom: 24,
+    minHeight: Dimensions.get('window').height * 0.2,
+    flexDirection: 'column',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
   },
   formContainer: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    marginTop: 30,
   },
   inputContainer: {
     marginBottom: 20,
@@ -283,6 +354,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333333',
   },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333333',
+    paddingRight: 8,
+  },
+  passwordToggle: {
+    padding: 4,
+  },
+  skeletonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  skeletonForm: {
+    width: '100%',
+  },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -291,7 +388,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666666',
+    color: '#FFFFFF',
   },
   errorContainer: {
     backgroundColor: '#FFEBEE',
@@ -332,13 +429,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textTransform: 'uppercase',
   },
+  signOutContainer: {
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
   signOutButton: {
     backgroundColor: '#f6bd33',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

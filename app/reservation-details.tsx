@@ -1,8 +1,13 @@
+import { ScreenBackground } from '@/components/screen-background';
+import { Skeleton } from '@/components/skeleton-loader';
+import { ApiError, cancelReservation, getReservation, Reservation } from '@/services/api';
+import { storage } from '@/utils/storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,8 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getReservation, cancelReservation, Reservation, ApiError } from '@/services/api';
-import { storage } from '@/utils/storage';
 
 export default function ReservationDetailsScreen() {
   const router = useRouter();
@@ -21,6 +24,7 @@ export default function ReservationDetailsScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showCancellationInfoModal, setShowCancellationInfoModal] = useState(false);
 
   useEffect(() => {
     if (reservationId) {
@@ -94,7 +98,7 @@ export default function ReservationDetailsScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    router.push('/');
   };
 
   const handleCancelReservation = async () => {
@@ -124,16 +128,10 @@ export default function ReservationDetailsScreen() {
       
       setSuccessMessage('Reservation cancelled successfully! A voucher has been issued.');
       
-      // Refresh reservation details
+      // Refresh reservation details to show updated status
       await fetchReservationDetails();
       
-      // Trigger a refresh of vouchers on home page by using a focus listener
-      // This will be handled by the home page checking vouchers on focus
-      
-      // Navigate back after 2 seconds
-      setTimeout(() => {
-        router.back();
-      }, 2000);
+      // Don't navigate away - let user stay on the page and use back button to return home
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.status === 401) {
@@ -155,10 +153,11 @@ export default function ReservationDetailsScreen() {
   };
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#1E3264" />
+          <MaterialIcons name="arrow-back" size={32} color="#f6bd33" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Reservation Details</Text>
         <View style={styles.placeholder} />
@@ -166,9 +165,28 @@ export default function ReservationDetailsScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#1E3264" />
-            <Text style={styles.loadingText}>Loading reservation details...</Text>
+          <View style={styles.skeletonContainer}>
+            <Skeleton width={100} height={32} borderRadius={16} style={{ marginBottom: 24, alignSelf: 'center' }} />
+            <View style={styles.skeletonCard}>
+              <Skeleton width={60} height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+              <Skeleton width="100%" height={18} borderRadius={4} style={{ marginBottom: 4 }} />
+              <Skeleton width="80%" height={16} borderRadius={4} />
+            </View>
+            <View style={styles.skeletonCard}>
+              <Skeleton width={60} height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+              <Skeleton width="100%" height={18} borderRadius={4} style={{ marginBottom: 4 }} />
+              <Skeleton width="70%" height={16} borderRadius={4} />
+            </View>
+            <View style={styles.skeletonCard}>
+              <Skeleton width={60} height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+              <Skeleton width="100%" height={18} borderRadius={4} style={{ marginBottom: 4 }} />
+              <Skeleton width="60%" height={16} borderRadius={4} />
+            </View>
+            <View style={styles.skeletonCard}>
+              <Skeleton width={100} height={20} borderRadius={4} style={{ marginBottom: 8 }} />
+              <Skeleton width="100%" height={18} borderRadius={4} style={{ marginBottom: 4 }} />
+              <Skeleton width="80%" height={16} borderRadius={4} />
+            </View>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
@@ -184,23 +202,23 @@ export default function ReservationDetailsScreen() {
           </View>
         ) : reservation ? (
           <View style={styles.content}>
-            {/* Status Card */}
-            <View style={styles.card}>
-              <View style={styles.statusContainer}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(reservation.status) },
-                  ]}
-                >
-                  <Text style={styles.statusText}>{reservation.status}</Text>
-                </View>
+            {/* Status Badge */}
+            <View style={styles.statusContainer}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: getStatusColor(reservation.status) },
+                ]}
+              >
+                <Text style={styles.statusText}>{reservation.status}</Text>
               </View>
             </View>
 
             {/* Location & Gate Info */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Location & Gate</Text>
+              <View style={styles.cardTitleContainer}>
+                <Text style={styles.cardTitle}>Location & Gate</Text>
+              </View>
               
               {reservation.location && (
                 <View style={styles.infoRow}>
@@ -225,7 +243,9 @@ export default function ReservationDetailsScreen() {
 
             {/* Validity Period */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Validity Period</Text>
+              <View style={styles.cardTitleContainer}>
+                <Text style={styles.cardTitle}>Validity Period</Text>
+              </View>
               
               <View style={styles.infoRow}>
                 <MaterialIcons name="schedule" size={24} color="#1E3264" />
@@ -244,25 +264,58 @@ export default function ReservationDetailsScreen() {
               </View>
             </View>
 
-            {/* QR Token */}
-            {reservation.qrToken && (
+            {/* Cancellation Information - only show if reservation is cancelled */}
+            {(reservation.status?.toUpperCase() === 'CANCELLED' || reservation.cancelledAt) && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>QR Code Token</Text>
-                <View style={styles.qrContainer}>
-                  <MaterialIcons name="qr-code" size={48} color="#1E3264" />
-                  <Text style={styles.qrToken}>{reservation.qrToken}</Text>
+                <View style={styles.cardHeaderWithRight}>
+                  <View style={styles.cardHeaderLeft}>
+                    <MaterialIcons name="cancel" size={24} color="#F44336" />
+                    <Text style={styles.cardTitle}>Cancellation Information</Text>
+                  </View>
+                  <View style={styles.infoIconContainer}>
+                    <TouchableOpacity
+                      onPress={() => setShowCancellationInfoModal(!showCancellationInfoModal)}
+                      activeOpacity={0.7}
+                      style={styles.infoIconButton}
+                    >
+                      <MaterialIcons name="info-outline" size={24} color="#666666" />
+                    </TouchableOpacity>
+                    {showCancellationInfoModal && (
+                      <>
+                        <View style={styles.tooltip}>
+                          <Text style={styles.tooltipText}>
+                            This reservation has been cancelled. A voucher has been issued to your account.
+                          </Text>
+                        </View>
+                        <View style={styles.tooltipArrowBorder} />
+                        <View style={styles.tooltipArrow} />
+                      </>
+                    )}
+                  </View>
                 </View>
+                <View style={styles.infoRow}>
+                  <MaterialIcons name="block" size={24} color="#F44336" />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Status</Text>
+                    <Text style={[styles.infoValue, { color: '#F44336' }]}>Cancelled</Text>
+                  </View>
+                </View>
+                {reservation.cancelledAt && (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="event-busy" size={24} color="#F44336" />
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoLabel}>Cancelled At</Text>
+                      <Text style={styles.infoValue}>{formatDate(reservation.cancelledAt)}</Text>
+                    </View>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* Cancel Button */}
+
+            {/* Cancel Button - only show if reservation can be cancelled */}
             {canCancelReservation() && (
-              <View style={styles.card}>
-                {successMessage && (
-                  <View style={styles.successContainer}>
-                    <Text style={styles.successText}>{successMessage}</Text>
-                  </View>
-                )}
+              <View>
                 {error && (
                   <View style={styles.errorMessageContainer}>
                     <Text style={styles.errorMessageText}>{error}</Text>
@@ -291,14 +344,38 @@ export default function ReservationDetailsScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      {/* Success Modal - show after cancellation */}
+      <Modal
+        visible={!!successMessage}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSuccessMessage(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModal}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSuccessMessage(null)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="close" size={24} color="#666666" />
+            </TouchableOpacity>
+            <MaterialIcons name="check-circle" size={64} color="#4CAF50" />
+            <Text style={styles.successModalTitle}>Reservation Cancelled</Text>
+            <Text style={styles.successModalText}>{successMessage}</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
@@ -306,17 +383,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#1E3264',
+    color: '#FFFFFF',
   },
   placeholder: {
     width: 40,
@@ -376,7 +450,8 @@ const styles = StyleSheet.create({
   },
   statusContainer: {
     alignItems: 'center',
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 16,
   },
   statusBadge: {
     paddingHorizontal: 20,
@@ -389,11 +464,95 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  cardHeaderWithRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  infoIconContainer: {
+    position: 'relative',
+    marginLeft: 8,
+  },
+  infoIconButton: {
+    padding: 4,
+  },
+  tooltip: {
+    position: 'absolute',
+    bottom: 34,
+    right: 80,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    minWidth: 250,
+    maxWidth: 300,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
+    transform: [{ translateX: 109 }], // Center tooltip above icon: (250/2 - 16) = 109px from right
+  },
+  tooltipArrowBorder: {
+    position: 'absolute',
+    bottom: 26,
+    right: 12, // Center of icon (24px icon / 2 + 4px padding = 16px from right)
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderTopWidth: 9,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#E0E0E0',
+    zIndex: 1000,
+    transform: [{ translateX: 4.5 }], // Center arrow (half of arrow width)
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    bottom: 27,
+    right: 12, // Center of icon (24px icon / 2 + 4px padding = 16px from right)
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#FFFFFF',
+    zIndex: 1001,
+    transform: [{ translateX: 4 }], // Center arrow (half of arrow width)
+  },
+  tooltipText: {
+    fontSize: 14,
+    color: '#666666',
+    lineHeight: 20,
+  },
+  cardTitleContainer: {
+    marginBottom: 16,
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1E3264',
-    marginBottom: 16,
   },
   infoRow: {
     flexDirection: 'row',
@@ -413,17 +572,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333333',
-  },
-  qrContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  qrToken: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666666',
-    fontFamily: 'monospace',
-    textAlign: 'center',
   },
   detailRow: {
     flexDirection: 'row',
@@ -467,19 +615,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  successContainer: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 16,
+  skeletonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  skeletonCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
     marginBottom: 16,
   },
-  successText: {
-    color: '#2E7D32',
-    fontSize: 14,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 280,
+    marginHorizontal: 20,
+    position: 'relative',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  successModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
-    fontWeight: '600',
+  },
+  successModalText: {
+    fontSize: 16,
+    color: '#333333',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   errorMessageContainer: {
     backgroundColor: '#FFEBEE',

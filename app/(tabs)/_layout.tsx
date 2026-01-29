@@ -21,13 +21,14 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#FFFFFF',
+        tabBarActiveTintColor: '#ffffff', // rgb(249, 227, 165)
+        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.59)',
         tabBarStyle: {
+          // Yellow navigation bar to better match the updated theme
           backgroundColor: '#f6bd33',
           borderTopWidth: 0,
           elevation: 8,
-          shadowColor: '#000',
+          shadowColor: '#0b1030',
           shadowOffset: {
             width: 0,
             height: -2,
@@ -36,11 +37,17 @@ export default function TabLayout() {
           shadowRadius: 4,
           zIndex: 1000,
           position: 'absolute',
-          height: 60,
-          paddingTop: 4,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 8,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
         },
         tabBarLabelStyle: {
-          color: '#FFFFFF',
+          fontSize: 11,
+          fontWeight: '600',
+          letterSpacing: 0.4,
+          textTransform: 'uppercase',
         },
         headerShown: false,
         tabBarButton: HapticTab,

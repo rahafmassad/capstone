@@ -1,5 +1,6 @@
 import { ApiError, login, signup } from '@/services/api';
 import { storage } from '@/utils/storage';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -8,6 +9,7 @@ import {
   Alert,
   Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -38,6 +40,8 @@ export default function WelcomeScreen() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsAcceptedInModal, setTermsAcceptedInModal] = useState(false);
 
   // Background animation values
   const orb1Opacity = useSharedValue(0.3);
@@ -48,32 +52,37 @@ export default function WelcomeScreen() {
   const logoY = useSharedValue(0);
   const buttonsX = useSharedValue(0);
   const signupFormX = useSharedValue(SCREEN_WIDTH);
-  const loginFormX = useSharedValue(-SCREEN_WIDTH);
+  const loginFormX = useSharedValue(SCREEN_WIDTH);
+  const footerOpacity = useSharedValue(1);
   
   // Button press animation values
   const signupButtonY = useSharedValue(0);
   const loginButtonY = useSharedValue(0);
 
   useEffect(() => {
-    // Animate orb 1 opacity
+    // Initialize and start orb 1 opacity animation - infinite loop with reverse
+    orb1Opacity.value = 0.3;
     orb1Opacity.value = withRepeat(
       withTiming(0.6, { duration: 6000, easing: Easing.inOut(Easing.ease) }),
       -1,
       true
     );
 
-    // Animate orb 2 opacity with delay
+    // Initialize and start orb 2 opacity animation - infinite loop with reverse
+    orb2Opacity.value = 0.2;
     orb2Opacity.value = withRepeat(
       withTiming(0.4, { duration: 8000, easing: Easing.inOut(Easing.ease) }),
       -1,
       true
     );
 
-    // Animate stripes
+    // Initialize and start stripe animation - smooth infinite loop with reverse
+    // Using reverse: true creates seamless back-and-forth motion without jumps
+    stripeX.value = -SCREEN_WIDTH * 2;
     stripeX.value = withRepeat(
       withTiming(SCREEN_WIDTH * 2, { duration: 20000, easing: Easing.linear }),
       -1,
-      false
+      true
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -82,25 +91,35 @@ export default function WelcomeScreen() {
     if (formType === 'signup') {
       // Logo moves up to top of form
       logoY.value = withTiming(-260, { duration: 400, easing: Easing.out(Easing.ease) });
-      // Buttons slide left
-      buttonsX.value = withTiming(-SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
+      // Buttons stay hidden (keep them off-screen, no animation when switching)
+      buttonsX.value = withTiming(-SCREEN_WIDTH, { duration: 0 });
       // Signup form slides in from right
       signupFormX.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
+      // Login form slides out to the right (hide it)
+      loginFormX.value = withTiming(SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
+      // Footer fades out
+      footerOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
     } else if (formType === 'login') {
       // Logo moves up to top of form
       logoY.value = withTiming(-230, { duration: 400, easing: Easing.out(Easing.ease) });
-      // Buttons slide right
-      buttonsX.value = withTiming(SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
-      // Login form slides in from left
+      // Buttons stay hidden (keep them off-screen, no animation when switching)
+      buttonsX.value = withTiming(-SCREEN_WIDTH, { duration: 0 });
+      // Login form slides in from right
       loginFormX.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
+      // Signup form slides out to the right (hide it)
+      signupFormX.value = withTiming(SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
+      // Footer fades out
+      footerOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
     } else {
-      // Reset animations
+      // Reset animations - buttons appear when no form is active
       logoY.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
       buttonsX.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
       signupFormX.value = withTiming(SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
-      loginFormX.value = withTiming(-SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
+      loginFormX.value = withTiming(SCREEN_WIDTH, { duration: 400, easing: Easing.in(Easing.ease) });
+      // Footer fades in
+      footerOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
     }
-  }, [formType, logoY, buttonsX, signupFormX, loginFormX]);
+  }, [formType, logoY, buttonsX, signupFormX, loginFormX, footerOpacity]);
 
   // Animated styles
   const orb1Style = useAnimatedStyle(() => ({
@@ -137,6 +156,10 @@ export default function WelcomeScreen() {
 
   const loginFormStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: loginFormX.value }],
+  }));
+
+  const footerStyle = useAnimatedStyle(() => ({
+    opacity: footerOpacity.value,
   }));
 
   const handleSignUp = () => {
@@ -229,12 +252,35 @@ export default function WelcomeScreen() {
     router.push('/reset-password');
   };
 
-  const handlePrivacyPolicy = () => {
-    console.log('Privacy Policy pressed');
-  };
+  // const handlePrivacyPolicy = () => {
+  //   console.log('Privacy Policy pressed');
+  // };
+
+  const [showTermsOnlyModal, setShowTermsOnlyModal] = useState(false);
 
   const handleTermsOfService = () => {
-    router.push('/terms');
+    setShowTermsModal(true);
+  };
+
+  const handleTermsFromFooter = () => {
+    setShowTermsOnlyModal(true);
+  };
+
+  const handleCloseTermsModal = () => {
+    setShowTermsModal(false);
+    setTermsAcceptedInModal(false);
+  };
+
+  const handleCloseTermsOnlyModal = () => {
+    setShowTermsOnlyModal(false);
+  };
+
+  const handleAcceptTermsInModal = () => {
+    if (termsAcceptedInModal) {
+      setAcceptedTerms(true);
+      setShowTermsModal(false);
+      setTermsAcceptedInModal(false);
+    }
   };
 
   return (
@@ -344,7 +390,7 @@ export default function WelcomeScreen() {
             >
               <View style={styles.card}>
                 <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                  <Text style={styles.backButtonText}>← Back</Text>
+                  <MaterialIcons name="arrow-back" size={32} color="#1E3264" />
                 </TouchableOpacity>
                 <Text style={styles.title}>Sign Up</Text>
 
@@ -407,7 +453,7 @@ export default function WelcomeScreen() {
                     <Text style={styles.checkboxLabel}>
                       I accept the{' '}
                       <Text style={styles.checkboxLink} onPress={handleTermsOfService}>
-                        Terms and Conditions
+                        Terms & Conditions
                       </Text>
                     </Text>
                   </TouchableOpacity>
@@ -426,9 +472,9 @@ export default function WelcomeScreen() {
 
                 <View style={styles.switchContainer}>
                   <Text style={styles.switchText}>
-                    ALREADY HAVE AN ACCOUNT?{' '}
+                    Already have an account?{' '}
                     <Text style={styles.switchLink} onPress={handleLogIn}>
-                      LOGIN
+                      Log In
                     </Text>
                   </Text>
                 </View>
@@ -444,7 +490,7 @@ export default function WelcomeScreen() {
             >
               <View style={styles.card}>
                 <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                  <Text style={styles.backButtonText}>← Back</Text>
+                  <MaterialIcons name="arrow-back" size={32} color="#1E3264" />
                 </TouchableOpacity>
                 <Text style={styles.loginTitle}>Log In</Text>
 
@@ -499,9 +545,9 @@ export default function WelcomeScreen() {
 
                 <View style={styles.switchContainer}>
                   <Text style={styles.switchText}>
-                    DON&apos;T HAVE AN ACCOUNT?{' '}
+                    Don&apos;t have an account?{' '}
                     <Text style={styles.switchLink} onPress={handleSignUp}>
-                      SIGNUP
+                      Sign up
                     </Text>
                   </Text>
                 </View>
@@ -510,22 +556,121 @@ export default function WelcomeScreen() {
           </Animated.View>
         </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
+        {/* Footer - fades in/out based on form selection */}
+        <Animated.View style={[styles.footer, footerStyle]} pointerEvents={formType === 'none' ? 'auto' : 'none'}>
           <Text style={styles.footerText}>
-            © 2025 Your Company Name. All rights reserved.
+            © 2026 Saffeh JO. All rights reserved.
           </Text>
           <View style={styles.footerLinks}>
-            <Text style={styles.footerLink} onPress={handlePrivacyPolicy}>
+            {/* <Text style={styles.footerLink} onPress={handlePrivacyPolicy}>
               Privacy Policy
             </Text>
-            <Text style={styles.footerSeparator}> | </Text>
-            <Text style={styles.footerLink} onPress={handleTermsOfService}>
-              Terms of Service
+            <Text style={styles.footerSeparator}> | </Text> */}
+            <Text style={styles.footerLink} onPress={handleTermsFromFooter}>
+              Terms & Conditions
             </Text>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* Terms and Conditions Modal */}
+      <Modal
+        visible={showTermsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseTermsModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.termsModalContainer}>
+            {/* Header with X button */}
+            <View style={styles.termsModalHeader}>
+              <Text style={styles.termsModalTitle}>Terms & Conditions</Text>
+              <TouchableOpacity
+                style={styles.termsModalCloseButton}
+                onPress={handleCloseTermsModal}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="close" size={24} color="#666666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Terms Content */}
+            <ScrollView
+              style={styles.termsModalScroll}
+              contentContainerStyle={styles.termsModalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.termsModalText}>
+                By using SAFFEH JO, you agree to provide accurate information and follow all booking rules. You can reserve a parking spot up to one hour in advance, pay online, and check in using a one-time QR code. Cancellations made at least one hour before the booking time get a 50% refund, while late arrivals result in cancellation. Misuse of the app or system may result in suspension, and while real-time data is used, availability may not always be guaranteed.
+              </Text>
+              {/* Parking in the wrong spot leads to a 3-day ban and 5 JOD fine; If someone takes your spot, you may get double the fee with valid proof. */}
+              {/* Checkbox */}
+              <TouchableOpacity
+                style={styles.termsCheckboxContainer}
+                onPress={() => setTermsAcceptedInModal(!termsAcceptedInModal)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.termsCheckbox, termsAcceptedInModal && styles.termsCheckboxChecked]}>
+                  {termsAcceptedInModal && (
+                    <MaterialIcons name="check" size={20} color="#FFFFFF" />
+                  )}
+                </View>
+                <Text style={styles.termsCheckboxLabel}>I accept the terms and conditions</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Accept Button */}
+            <View style={styles.termsModalFooter}>
+              <TouchableOpacity
+                style={[
+                  styles.termsAcceptButton,
+                  !termsAcceptedInModal && styles.termsAcceptButtonDisabled,
+                ]}
+                onPress={handleAcceptTermsInModal}
+                activeOpacity={0.8}
+                disabled={!termsAcceptedInModal}
+              >
+                <Text style={styles.termsAcceptButtonText}>ACCEPT</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Terms & Conditions Modal (Footer - Read Only) */}
+      <Modal
+        visible={showTermsOnlyModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseTermsOnlyModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.termsModalContainer}>
+            {/* Header with X button */}
+            <View style={styles.termsModalHeader}>
+              <Text style={styles.termsModalTitle}>Terms & Conditions</Text>
+              <TouchableOpacity
+                style={styles.termsModalCloseButton}
+                onPress={handleCloseTermsOnlyModal}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="close" size={24} color="#666666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Terms Content Only - No Checkbox or Accept Button */}
+            <ScrollView
+              style={styles.termsModalScroll}
+              contentContainerStyle={styles.termsModalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.termsModalText}>
+                By using SAFFEH JO, you agree to provide accurate information and follow all booking rules. You can reserve a parking spot up to one hour in advance, pay online, and check in using a one-time QR code. Cancellations made at least one hour before the booking time get a 50% refund, while late arrivals result in cancellation. Parking in the wrong spot leads to a 3-day ban and 5 JOD fine; If someone takes your spot, you may get double the fee with valid proof. Misuse of the app or system may result in suspension, and while real-time data is used, availability may not always be guaranteed.
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -667,17 +812,15 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   backButton: {
-    marginBottom: 20,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#1E3264',
-    fontWeight: '600',
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#1E3264',
+    color: '#F5BE32',
     textAlign: 'center',
     marginBottom: 30,
     fontFamily: 'sans-serif',
@@ -728,10 +871,10 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: '#333333',
+    color: '#1E3264',
   },
   submitButton: {
-    backgroundColor: '#1E3264',
+    backgroundColor: '#F5BE32',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -753,7 +896,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#1E3264',
     textTransform: 'uppercase',
   },
   loginSubmitButton: {
@@ -823,10 +966,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   switchText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333333',
   },
   switchLink: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1E3264',
   },
@@ -858,5 +1002,117 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FFFFFF',
     fontFamily: 'sans-serif',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  termsModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  termsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  termsModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1E3264',
+  },
+  termsModalCloseButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  termsModalScroll: {
+    flex: 1,
+  },
+  termsModalContent: {
+    padding: 24,
+  },
+  termsModalText: {
+    fontSize: 16,
+    color: '#333333',
+    lineHeight: 24,
+    marginBottom: 24,
+    textAlign: 'left',
+  },
+  termsCheckboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  termsCheckbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#666666',
+    borderRadius: 4,
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  termsCheckboxChecked: {
+    backgroundColor: '#f6bd33',
+    borderColor: '#f6bd33',
+  },
+  termsCheckboxLabel: {
+    fontSize: 16,
+    color: '#333333',
+    flex: 1,
+  },
+  termsModalFooter: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  termsAcceptButton: {
+    backgroundColor: '#f6bd33',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  termsAcceptButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    opacity: 0.6,
+  },
+  termsAcceptButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1E3264',
+    textTransform: 'uppercase',
   },
 });

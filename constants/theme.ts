@@ -5,27 +5,80 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+/**
+ * Global color system inspired by the automotive artwork:
+ * deep navy roads, bold orange beams, and warm golden accents.
+ *
+ * Use these semantic tokens across the app instead of hard‑coding colors
+ * so that screens feel consistently branded.
+ */
+const primaryNavy = '#0b1030';
+const primaryOrange = '#ff8a1f';
+const accentGold = '#f6bd33';
+const softSand = '#fff5da';
+const softGrey = '#e4e6ed';
+const dangerRed = '#e53935';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    // Core
+    text: '#141824',
+    background: softSand,
+    tint: primaryOrange,
+    icon: primaryNavy,
+    tabIconDefault: '#f9e3a5',
+    tabIconSelected: '#ffffff',
+
+    // Surfaces
+    surface: '#ffffff',
+    surfaceMuted: '#fdf0c6',
+    card: '#ffb347',
+    cardAlt: '#18255f',
+
+    // Borders & subtle lines
+    outline: '#f0d38b',
+    divider: softGrey,
+
+    // Feedback
+    danger: dangerRed,
+    success: '#2e7d32',
+    warning: accentGold,
+
+    // Brand helpers
+    navy: primaryNavy,
+    orange: primaryOrange,
+    gold: accentGold,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    // Core
+    text: '#f5f6fb',
+    background: primaryNavy,
+    tint: accentGold,
+    icon: '#c2c7ff',
+    tabIconDefault: '#7d86b8',
+    tabIconSelected: '#ffffff',
+
+    // Surfaces
+    surface: '#151a3b',
+    surfaceMuted: '#1f264b',
+    card: '#ff8a1f',
+    cardAlt: '#26356d',
+
+    // Borders & subtle lines
+    outline: '#3b467a',
+    divider: '#22284a',
+
+    // Feedback
+    danger: '#ef5350',
+    success: '#66bb6a',
+    warning: accentGold,
+
+    // Brand helpers
+    navy: primaryNavy,
+    orange: primaryOrange,
+    gold: accentGold,
   },
-};
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

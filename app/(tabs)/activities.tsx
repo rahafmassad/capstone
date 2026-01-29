@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import { ScreenBackground } from '@/components/screen-background';
+import { Skeleton } from '@/components/skeleton-loader';
+import { Activity, ApiError, getActivities } from '@/services/api';
+import { storage } from '@/utils/storage';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { getActivities, Activity, ApiError } from '@/services/api';
-import { storage } from '@/utils/storage';
 
 type SortOption = 'all' | 'newest' | 'oldest';
 
@@ -20,6 +23,7 @@ export default function ActivitiesScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   // Fetch activities on component mount and when sort changes
   useEffect(() => {
@@ -64,6 +68,7 @@ export default function ActivitiesScreen() {
 
   const handleSortChange = (sort: SortOption) => {
     setSelectedSort(sort);
+    setShowFilterModal(false);
   };
 
   // Format activity action for display
@@ -92,79 +97,36 @@ export default function ActivitiesScreen() {
   };
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Page Title */}
-        <Text style={styles.pageTitle}>Activities</Text>
-        
-        {/* Sorting Buttons */}
-        <View style={styles.sortContainer}>
+        {/* Page Title with Filter Icon */}
+        <View style={styles.titleRow}>
+          <Text style={styles.pageTitle}>Activities</Text>
           <TouchableOpacity
-            style={[
-              styles.sortButton,
-              selectedSort === 'all' && styles.sortButtonSelected,
-            ]}
-            onPress={() => handleSortChange('all')}
-            activeOpacity={0.8}
+            style={styles.filterIconButton}
+            onPress={() => setShowFilterModal(!showFilterModal)}
+            activeOpacity={0.85}
           >
-            <Text
-              style={[
-                styles.sortButtonText,
-                selectedSort === 'all' && styles.sortButtonTextSelected,
-              ]}
-            >
-              All
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.sortButton,
-              selectedSort === 'newest' && styles.sortButtonSelected,
-            ]}
-            onPress={() => handleSortChange('newest')}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.sortButtonText,
-                selectedSort === 'newest' && styles.sortButtonTextSelected,
-              ]}
-            >
-              Newest to oldest
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.sortButton,
-              selectedSort === 'oldest' && styles.sortButtonSelected,
-            ]}
-            onPress={() => handleSortChange('oldest')}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.sortButtonText,
-                selectedSort === 'oldest' && styles.sortButtonTextSelected,
-              ]}
-            >
-              Oldest to newest
-            </Text>
+            <MaterialIcons name="filter-list" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
-        {/* Activities Heading */}
-        <Text style={styles.activitiesHeading}>Activities</Text>
-
         {/* Activities List */}
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#1E3264" />
-            <Text style={styles.loadingText}>Loading activities...</Text>
+          <View style={styles.activitiesList}>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <View key={index} style={styles.activityItem}>
+                <Skeleton width={50} height={50} borderRadius={25} style={{ marginRight: 16 }} />
+                <View style={styles.activityContent}>
+                  <Skeleton width="70%" height={18} borderRadius={4} style={{ marginBottom: 8 }} />
+                  <Skeleton width="50%" height={14} borderRadius={4} />
+                </View>
+              </View>
+            ))}
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
@@ -179,15 +141,28 @@ export default function ActivitiesScreen() {
           </View>
         ) : activities.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No activities found</Text>
+            <Text style={styles.emptyHeading}>No activities here.</Text>
+            <Text style={styles.emptyText}>
+              There are no activities to display.{'\n'}
+              Reserve a parking slot to check your activities!
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => router.push('/(tabs)')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyButtonText}>Reserve a parking</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.activitiesList}>
             {activities.map((activity) => (
               <View key={activity.id} style={styles.activityItem}>
-                <View style={styles.activityIcon}>
-                  {/* Circular placeholder */}
-                </View>
+                <Image
+                  source={require('@/assets/images/activity.png')}
+                  style={styles.activityIcon}
+                  contentFit="cover"
+                />
                 <View style={styles.activityContent}>
                   <Text style={styles.activityName}>
                     {formatActivityName(activity.action)}
@@ -201,57 +176,178 @@ export default function ActivitiesScreen() {
           </View>
         )}
       </ScrollView>
+      
+      {/* Filter Dropdown - Outside ScrollView to appear on top */}
+      {showFilterModal && (
+        <View style={styles.filterDropdownContainer}>
+          <View style={styles.filterDropdown}>
+            {/* Triangle pointing up */}
+            <View style={styles.triangle} />
+            
+            {/* Header with X button */}
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filter</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="close" size={20} color="#666666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* All Option */}
+            <TouchableOpacity
+              style={styles.checkboxOption}
+              onPress={() => handleSortChange('all')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, selectedSort === 'all' && styles.checkboxChecked]}>
+                {selectedSort === 'all' && (
+                  <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>All</Text>
+            </TouchableOpacity>
+
+            {/* Newest to Oldest Option */}
+            <TouchableOpacity
+              style={styles.checkboxOption}
+              onPress={() => handleSortChange('newest')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, selectedSort === 'newest' && styles.checkboxChecked]}>
+                {selectedSort === 'newest' && (
+                  <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>Newest to oldest</Text>
+            </TouchableOpacity>
+
+            {/* Oldest to Newest Option */}
+            <TouchableOpacity
+              style={styles.checkboxOption}
+              onPress={() => handleSortChange('oldest')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, selectedSort === 'oldest' && styles.checkboxChecked]}>
+                {selectedSort === 'oldest' && (
+                  <MaterialIcons name="check" size={18} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>Oldest to newest</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    marginBottom: 40,
   },
   pageTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#333333',
-    textAlign: 'center',
-    marginTop: 20,
-    marginBottom: 24,
-  },
-  sortContainer: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    gap: 12,
-  },
-  sortButton: {
+    color: '#FFFFFF',
+    textAlign: 'left',
     flex: 1,
+  },
+  filterIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#f6bd33',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sortButtonSelected: {
-    backgroundColor: '#1E3264',
+  filterDropdownContainer: {
+    position: 'absolute',
+    top: 80,
+    right: 20,
+    zIndex: 9999,
+    elevation: 10,
   },
-  sortButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
+  filterDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 220,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  sortButtonTextSelected: {
-    color: '#FFFFFF',
+  triangle: {
+    position: 'absolute',
+    top: -8,
+    right: 12,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#FFFFFF',
   },
-  activitiesHeading: {
-    fontSize: 24,
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  filterTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#1E3264',
+  },
+  checkboxOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#1E3264',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#1E3264',
+    borderColor: '#1E3264',
+  },
+  checkboxLabel: {
+    fontSize: 16,
     color: '#333333',
-    marginBottom: 20,
+    flex: 1,
   },
   activitiesList: {
     gap: 16,
@@ -265,7 +361,6 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#E0E0E0',
     marginRight: 16,
   },
   activityContent: {
@@ -274,12 +369,12 @@ const styles = StyleSheet.create({
   activityName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333333',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   activityDateTime: {
     fontSize: 14,
-    color: '#666666',
+    color: 'rgba(255, 255, 255, 0.63)',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -289,7 +384,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666666',
+    color: '#FFFFFF',
   },
   errorContainer: {
     alignItems: 'center',
@@ -315,14 +410,43 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingHorizontal: 20,
+    minHeight: 400,
+  },
+  emptyContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyHeading: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#999999',
+    fontSize: 16,
+    color: '#FFFFFF',
     textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  emptyButton: {
+    backgroundColor: '#f6bd33',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    minWidth: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E3264',
   },
 });
 
