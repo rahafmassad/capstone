@@ -3,8 +3,8 @@ import { ApiError, Gate, getGateSpots, getLocationGates, Location, SpotWithStatu
 import { storage } from '@/utils/storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Dimensions,
     SafeAreaView,
@@ -30,6 +30,7 @@ export default function ParkingSlotScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
   const [gatesWithNoSpots, setGatesWithNoSpots] = useState<Set<string>>(new Set());
+  const [isFocused, setIsFocused] = useState(true);
   const gatesScrollRef = useRef<ScrollView>(null);
   const blocksScrollRef = useRef<ScrollView>(null);
 
@@ -94,6 +95,107 @@ export default function ParkingSlotScreen() {
       setSelectedBlock(null);
     }
   }, [selectedGate]);
+
+  // Track screen focus state
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => {
+        setIsFocused(false);
+      };
+    }, [])
+  );
+
+  // Poll for spots updates when a gate is selected (real-time updates)
+  // Only poll when the screen is focused
+  useEffect(() => {
+    if (!selectedGate || !isFocused) {
+      return;
+    }
+
+    const pollForSpots = async () => {
+      try {
+        const token = await storage.getToken();
+        if (!token) {
+          router.replace('/welcome');
+          return;
+        }
+
+        const response = await getGateSpots(selectedGate.id, token);
+        setSpots(response.spots || []);
+      } catch (err) {
+        const apiError = err as ApiError;
+        if (apiError.status === 401) {
+          await storage.clearAuth();
+          router.replace('/welcome');
+          return;
+        }
+        // Silently fail for polling - don't show errors for background updates
+        console.error('Error polling spots:', err);
+      }
+    };
+
+    // Poll every 2 seconds for real-time updates
+    const interval = setInterval(pollForSpots, 2000);
+    // Start polling immediately (after a small delay to let initial fetch complete)
+    const timeout = setTimeout(pollForSpots, 2500);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [selectedGate, isFocused]);
+
+  // Poll for gates availability updates periodically
+  // Only poll when the screen is focused
+  useEffect(() => {
+    if (gates.length === 0 || !isFocused) {
+      return;
+    }
+
+    const pollForGatesAvailability = async () => {
+      try {
+        const token = await storage.getToken();
+        if (!token) {
+          return;
+        }
+
+        const unavailableGates = new Set<string>();
+        
+        // Check each gate for available spots
+        for (const gate of gates) {
+          try {
+            const response = await getGateSpots(gate.id, token);
+            const hasAvailableSpots = response.spots?.some(spot => 
+              spot.cvStatus?.toUpperCase() === 'FREE' && spot.status === 'FREE'
+            );
+            
+            if (!hasAvailableSpots || response.spots?.length === 0) {
+              unavailableGates.add(gate.id);
+            }
+          } catch {
+            // If we can't fetch spots, assume gate is unavailable
+            unavailableGates.add(gate.id);
+          }
+        }
+        
+        setGatesWithNoSpots(unavailableGates);
+      } catch (err) {
+        // Silently fail for polling - don't show errors for background updates
+        console.error('Error polling gates availability:', err);
+      }
+    };
+
+    // Poll every 3 seconds for gates availability
+    const interval = setInterval(pollForGatesAvailability, 3000);
+    // Start polling after initial check completes
+    const timeout = setTimeout(pollForGatesAvailability, 3500);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [gates, isFocused]);
 
   // Auto-select first block when spots are loaded
   useEffect(() => {
@@ -699,6 +801,7 @@ const styles = StyleSheet.create({
   carImage: {
     width: 40,
     height: 40,
+    transform: [{ rotate: '90deg' }],
   },
   pathDivider: {
     flexDirection: 'row',
