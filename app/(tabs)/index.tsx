@@ -33,6 +33,9 @@ export default function HomeScreen() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [vouchersModalLoading, setVouchersModalLoading] = useState(false);
   const [vouchersModalError, setVouchersModalError] = useState<string | null>(null);
+  const [qrCodeHidden, setQrCodeHidden] = useState(false);
+  const consumedExpiredTimestampRef = React.useRef<number | null>(null);
+  const reservationIdRef = React.useRef<string | null>(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -62,6 +65,100 @@ export default function HomeScreen() {
       refreshData();
     }, [])
   );
+
+  // Poll for reservation status to check if QR code was consumed
+  // Only poll when there's an active reservation with QR code that hasn't been consumed
+  useEffect(() => {
+    // Check if we should start polling
+    const shouldPoll = latestReservation && 
+                       latestReservation.qrToken && 
+                       !latestReservation.consumedAt &&
+                       latestReservation.status?.toUpperCase() !== 'CANCELLED' &&
+                       !latestReservation.cancelledAt;
+
+    if (!shouldPoll) {
+      return; // Don't poll if no active reservation or already consumed
+    }
+
+    // Poll every 3 seconds to check if QR code was consumed
+    const pollInterval = setInterval(async () => {
+      try {
+        const token = await storage.getToken();
+        if (!token) {
+          return;
+        }
+
+        const response = await getMyReservations(token);
+        const reservations = response.reservations || [];
+        
+        // Find the current reservation by ID
+        const currentReservation = reservations.find(r => r.id === latestReservation.id);
+        
+        if (currentReservation) {
+          // Update the reservation state if it changed (e.g., consumed)
+          if (currentReservation.consumedAt !== latestReservation.consumedAt) {
+            setLatestReservation(currentReservation);
+          }
+        }
+      } catch (err) {
+        // Silently fail polling - don't show errors
+        console.error('Error polling reservation status:', err);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Cleanup interval on unmount or when conditions change
+    return () => clearInterval(pollInterval);
+  }, [latestReservation]);
+
+  // Check if reservation is consumed and handle 2-minute timer (only for consumed, not expired)
+  useEffect(() => {
+    if (!latestReservation) {
+      setQrCodeHidden(false);
+      consumedExpiredTimestampRef.current = null;
+      reservationIdRef.current = null;
+      return;
+    }
+
+    // Reset if reservation ID changed
+    if (reservationIdRef.current !== latestReservation.id) {
+      consumedExpiredTimestampRef.current = null;
+      reservationIdRef.current = latestReservation.id;
+      setQrCodeHidden(false);
+    }
+
+    const isConsumed = !!latestReservation.consumedAt;
+    
+    // Only apply hiding logic for consumed QR codes, not expired ones
+    if (isConsumed && latestReservation.consumedAt) {
+      // Get the timestamp when it was consumed
+      const consumedTime = new Date(latestReservation.consumedAt).getTime();
+      
+      // Only set the timestamp if we haven't already tracked it for this reservation
+      if (consumedExpiredTimestampRef.current === null) {
+        consumedExpiredTimestampRef.current = consumedTime;
+      }
+
+      // Calculate time elapsed since consumption
+      const timeElapsed = Date.now() - consumedExpiredTimestampRef.current;
+      const twoMinutes = 120000; // 2 minutes in milliseconds
+
+      if (timeElapsed >= twoMinutes) {
+        // Already past 2 minutes, hide immediately
+        setQrCodeHidden(true);
+      } else {
+        // Set timer to hide QR code section after remaining time
+        const remainingTime = twoMinutes - timeElapsed;
+        const timer = setTimeout(() => {
+          setQrCodeHidden(true);
+        }, remainingTime);
+
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setQrCodeHidden(false);
+      consumedExpiredTimestampRef.current = null;
+    }
+  }, [latestReservation]);
 
   const fetchLocations = async () => {
     setLoading(true);
@@ -377,7 +474,8 @@ export default function HomeScreen() {
           {latestReservation && 
            latestReservation.qrToken && 
            latestReservation.status?.toUpperCase() !== 'CANCELLED' &&
-           !latestReservation.cancelledAt && (
+           !latestReservation.cancelledAt &&
+           !qrCodeHidden && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Reservation QR Code</Text>
               <View style={styles.qrCodeContainer}>
@@ -396,6 +494,14 @@ export default function HomeScreen() {
                         color="#1E3264"
                         backgroundColor="#FFFFFF"
                       />
+                      {/* Overlay for consumed/expired QR codes */}
+                      {(latestReservation.consumedAt || (latestReservation.validUntil && new Date(latestReservation.validUntil) < new Date())) && (
+                        <View style={styles.qrCodeOverlay}>
+                          <Text style={styles.qrCodeOverlayText}>
+                            {latestReservation.consumedAt ? 'CONSUMED' : 'EXPIRED'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.qrCodeLabel}>Scan at the gate to enter</Text>
                     <TouchableOpacity
@@ -1050,6 +1156,28 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 2,
     borderColor: '#E0E0E0',
+    position: 'relative',
+  },
+  qrCodeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 0,
+  },
+  qrCodeOverlayText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   qrCodeLabel: {
     fontSize: 14,
