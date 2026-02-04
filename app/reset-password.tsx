@@ -1,4 +1,4 @@
-import { ApiError, forgotPassword } from '@/services/api';
+import { ApiError, forgotPassword, resetPassword } from '@/services/api';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -29,9 +29,14 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(null); // Token received from forgot password API
 
   // Background animation values
   const orb1Opacity = useSharedValue(0.3);
@@ -83,32 +88,81 @@ export default function ResetPasswordScreen() {
   };
 
   const handleSubmit = async () => {
-    // Validation
-    if (!email.trim()) {
-      setError('Please enter your email address');
+    setError(null);
+    setSuccess(false);
+
+    // Step 1: Request password reset token
+    if (!resetToken) {
+      // Validation
+      if (!email.trim()) {
+        setError('Please enter your email address');
+        return;
+      }
+
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setError('Please enter a valid email address');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const response = await forgotPassword({
+          email: email.trim().toLowerCase(),
+        });
+
+        // Check if token is in response
+        if (response.token) {
+          setResetToken(response.token);
+          setSuccess(true);
+        } else {
+          setError('Token not received. Please try again.');
+        }
+      } catch (err) {
+        const apiError = err as ApiError;
+        const errorMessage = apiError.message || 'An error occurred. Please try again.';
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      setError('Please enter a valid email address');
+    // Step 2: Reset password with token
+    if (!resetToken) {
+      setError('Reset token is missing. Please request a new token.');
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      setError('Please enter a new password');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccess(false);
 
     try {
-      const response = await forgotPassword({
-        email: email.trim().toLowerCase(),
+      const response = await resetPassword({
+        token: resetToken, // Use the token received from forgot password API
+        newPassword: newPassword.trim(),
       });
 
       setSuccess(true);
       Alert.alert(
-        'Password Reset Requested',
-        'If this email exists in our system, a password reset link has been sent. Please check your email.',
+        'Password Reset Successful',
+        'Your password has been reset successfully. You can now login with your new password.',
         [
           {
             text: 'OK',
@@ -120,7 +174,6 @@ export default function ResetPasswordScreen() {
       const apiError = err as ApiError;
       const errorMessage = apiError.message || 'An error occurred. Please try again.';
       setError(errorMessage);
-      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -191,7 +244,9 @@ export default function ResetPasswordScreen() {
 
             {/* Description */}
             <Text style={styles.description}>
-              Enter your email address and we'll send you instructions to reset your password.
+              {!resetToken
+                ? "Enter your email address and we'll send you a reset token."
+                : 'Enter your new password to complete the reset.'}
             </Text>
 
             {/* Error Message */}
@@ -201,34 +256,116 @@ export default function ResetPasswordScreen() {
               </View>
             )}
 
-            {/* Success Message */}
-            {success && (
+            {/* Success Message - Token received */}
+            {success && !resetToken && (
               <View style={styles.successContainer}>
                 <Text style={styles.successText}>
-                  Reset instructions sent to your email.
+                  Reset token received. Please enter your new password.
                 </Text>
               </View>
             )}
 
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, error && styles.inputError]}
-                placeholder="Enter email..."
-                placeholderTextColor="#CCCCCC"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setError(null);
-                  setSuccess(false);
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+            {/* Success Message - Password reset successful */}
+            {success && resetToken && (
+              <View style={styles.successContainer}>
+                <MaterialIcons name="check-circle" size={24} color="#4CAF50" style={styles.successIcon} />
+                <Text style={styles.successText}>
+                  Password has been reset successfully! You can now login with your new password.
+                </Text>
+              </View>
+            )}
+
+            {/* Email Input - Only show if token not received */}
+            {!resetToken && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={[styles.input, error && styles.inputError]}
+                  placeholder="Enter email..."
+                  placeholderTextColor="#CCCCCC"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setError(null);
+                    setSuccess(false);
+                  }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+              </View>
+            )}
+
+            {/* New Password Input - Only show after token is received */}
+            {resetToken && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>New Password</Text>
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    style={[styles.passwordInput, error && styles.inputError]}
+                    placeholder="Enter new password..."
+                    placeholderTextColor="#CCCCCC"
+                    value={newPassword}
+                    onChangeText={(text) => {
+                      setNewPassword(text);
+                      setError(null);
+                      setSuccess(false);
+                    }}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowPassword(!showPassword)}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons
+                      name={showPassword ? 'visibility' : 'visibility-off'}
+                      size={24}
+                      color="#666666"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Confirm Password Input - Only show after token is received */}
+            {resetToken && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    style={[styles.passwordInput, error && styles.inputError]}
+                    placeholder="Confirm new password..."
+                    placeholderTextColor="#CCCCCC"
+                    value={confirmPassword}
+                    onChangeText={(text) => {
+                      setConfirmPassword(text);
+                      setError(null);
+                      setSuccess(false);
+                    }}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons
+                      name={showConfirmPassword ? 'visibility' : 'visibility-off'}
+                      size={24}
+                      color="#666666"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Submit Button */}
             <TouchableOpacity
@@ -238,9 +375,31 @@ export default function ResetPasswordScreen() {
               disabled={loading}
             >
               <Text style={styles.submitButtonText}>
-                {loading ? 'SENDING...' : 'SEND RESET LINK'}
+                {loading
+                  ? resetToken
+                    ? 'RESETTING...'
+                    : 'SENDING...'
+                  : resetToken
+                    ? 'RESET PASSWORD'
+                    : 'SEND RESET TOKEN'}
               </Text>
             </TouchableOpacity>
+
+            {/* Change Email Button - Only show after token is received */}
+            {resetToken && (
+              <TouchableOpacity
+                onPress={() => {
+                  setResetToken(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                  setError(null);
+                  setSuccess(false);
+                }}
+                style={styles.changeEmailButton}
+              >
+                <Text style={styles.changeEmailButtonText}>Change Email</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Back Button */}
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -317,6 +476,17 @@ const styles = StyleSheet.create({
     zIndex: 1,
     justifyContent: 'center',
   },
+  changeEmailButton: {
+    marginTop: 15,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  changeEmailButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E3264',
+    textDecorationLine: 'underline',
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -378,11 +548,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  successIcon: {
+    marginRight: 8,
   },
   successText: {
     color: '#2E7D32',
     fontSize: 14,
-    textAlign: 'center',
+    flex: 1,
   },
   inputContainer: {
     marginBottom: 25,
@@ -405,6 +580,24 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#F44336',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#333333',
+  },
+  eyeButton: {
+    padding: 4,
   },
   submitButton: {
     backgroundColor: '#FFC107',

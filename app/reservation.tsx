@@ -19,12 +19,12 @@ import {
 
 export default function ReservationScreen() {
   const router = useRouter();
-  const { locationId, gateId, gateName, blockIndex, spotCount } = useLocalSearchParams<{
+  const { locationId, gateId, gateName /* blockIndex, spotCount */ } = useLocalSearchParams<{
     locationId: string;
     gateId: string;
     gateName: string;
-    blockIndex: string;
-    spotCount: string;
+    // blockIndex: string;
+    // spotCount: string;
   }>();
 
   const [location, setLocation] = useState<Location | null>(null);
@@ -242,7 +242,7 @@ export default function ReservationScreen() {
     }
   };
 
-  const blockLetter = blockIndex ? String.fromCharCode(65 + parseInt(blockIndex)) : 'A';
+  // const blockLetter = blockIndex ? String.fromCharCode(65 + parseInt(blockIndex)) : 'A';
 
   return (
     <ScreenBackground>
@@ -339,7 +339,7 @@ export default function ReservationScreen() {
               )}
 
               {/* Block Card */}
-              {blockIndex !== undefined && (
+              {/* {blockIndex !== undefined && (
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
                     <MaterialIcons name="view-module" size={24} color="#4CAF50" />
@@ -350,7 +350,7 @@ export default function ReservationScreen() {
                     <Text style={styles.cardSubValue}>{spotCount} spots</Text>
                   )}
                 </View>
-              )}
+              )} */}
 
               {/* Available Vouchers Card - Show before reservation, only if there are unused vouchers */}
               {!reservationStatus && !vouchersLoading && availableVouchers.length > 0 && (

@@ -4,7 +4,7 @@ import { ApiError, getCurrentUser, updateCurrentUser } from '@/services/api';
 import { storage } from '@/utils/storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -69,6 +69,20 @@ export default function ProfileScreen() {
   useEffect(() => {
     fetchUserData();
   }, [fetchUserData]);
+
+  // Refresh user data when screen comes into focus (e.g., after password reset)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshData = async () => {
+        const token = await storage.getToken();
+        if (token) {
+          // Refresh user data to ensure password field is cleared after reset
+          fetchUserData();
+        }
+      };
+      refreshData();
+    }, [fetchUserData])
+  );
 
   const handleUpdate = async () => {
     // Validation
