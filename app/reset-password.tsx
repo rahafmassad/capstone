@@ -93,24 +93,24 @@ export default function ResetPasswordScreen() {
 
     // Step 1: Request password reset token
     if (!resetToken) {
-      // Validation
-      if (!email.trim()) {
-        setError('Please enter your email address');
-        return;
-      }
+    // Validation
+    if (!email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
 
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        setError('Please enter a valid email address');
-        return;
-      }
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address');
+      return;
+    }
 
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        const response = await forgotPassword({
-          email: email.trim().toLowerCase(),
+    try {
+      const response = await forgotPassword({
+        email: email.trim().toLowerCase(),
         });
 
         // Check if token is in response
@@ -277,24 +277,24 @@ export default function ResetPasswordScreen() {
 
             {/* Email Input - Only show if token not received */}
             {!resetToken && (
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={[styles.input, error && styles.inputError]}
-                  placeholder="Enter email..."
-                  placeholderTextColor="#CCCCCC"
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    setError(null);
-                    setSuccess(false);
-                  }}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!loading}
-                />
-              </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={[styles.input, error && styles.inputError]}
+                placeholder="Enter email..."
+                placeholderTextColor="#CCCCCC"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setError(null);
+                  setSuccess(false);
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+              />
+            </View>
             )}
 
             {/* New Password Input - Only show after token is received */}
